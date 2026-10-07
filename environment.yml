@@ -1,0 +1,29 @@
+# usage: $ conda env create --file=environment.yml
+name: eelfarm
+channels:
+- defaults
+- conda-forge
+dependencies:
+- python>=3.8
+- pip
+# eelfarm
+- psutil
+- requests
+- numpy
+# Eelbrain additions
+- scipy > 1.3
+- numba
+- matplotlib-base >= 3
+- ipython
+- colormath >= 2.1
+- pillow
+- tqdm >= 4.19
+- keyring >= 5
+- nibabel >= 2.5
+- nilearn
+# building
+- setuptools >= 17
+- cython
+- pip:
+  - https://github.com/christianbrodbeck/Eelbrain/archive/master.zip
+  - mne

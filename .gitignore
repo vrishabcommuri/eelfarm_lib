@@ -1,0 +1,4 @@
+.idea
+*.pyc
+eelfarm.egg-info
+dist
