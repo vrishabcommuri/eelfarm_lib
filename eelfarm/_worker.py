@@ -5,29 +5,30 @@
 >>> w = WorkerClient('', True, screen_logger=True)
 >>> w.start()
 """
+import re
+import sys
+import traceback
 from collections import Counter, defaultdict
 from datetime import timedelta
-from importlib.metadata import PackageNotFoundError, version as version_of
-from logging import DEBUG, INFO, getLogger, Formatter
+from importlib.metadata import PackageNotFoundError
+from importlib.metadata import version as version_of
+from logging import DEBUG, INFO, Formatter, getLogger
 from logging.handlers import WatchedFileHandler
 from queue import Empty, Queue
-import re
 from socket import gethostname
-import sys
-from threading import Thread, Event, Lock
-import traceback
+from threading import Event, Lock, Thread
 from time import sleep, time
 
-import eelbrain
 import psutil
 import requests
 
 from ._daemon import Daemon
 from ._jobs import JobWithID, job_description
-from ._transmit import serialize, deserialize
-from ._utils import PipeQueue, format_request_error, screen_handler, loop
+from ._transmit import deserialize, serialize
+from ._utils import PipeQueue, format_request_error, loop
 from ._version import version
 
+from .string import fmtxt
 
 COMMUNICATION_TIMEOUT = 4*60
 DATA_TIMEOUT = 4*60  # 30 lead to frequently dropping downloads
@@ -154,9 +155,8 @@ class WorkerClient:
             logger.setLevel(DEBUG)
         else:
             self.logger.setLevel(INFO)
-        if screen_logger:
-            if screen_handler not in self.logger.handlers:
-                self.logger.addHandler(screen_handler)
+        # if screen_logger and screen_handler not in self.logger.handlers:
+        #     self.logger.addHandler(screen_handler)
         self.sleep_time = float(sleep_time)
         # header for HTTP communication
         self._headers = {
@@ -189,7 +189,6 @@ class WorkerClient:
 
     def run(self, processes=None, nice=None):
         """Block and handle stdout"""
-        eelbrain.configure(processes, nice=nice)
         self.start()
         try:
             while not self._terminate.wait(60.):
@@ -218,7 +217,7 @@ class WorkerClient:
         self.worker.join()
         self.sender.join()
         self._joined = True
-        self._post_info(f"Shutdown complete")
+        self._post_info("Shutdown complete")
         self.logger.info("Shutdown complete")
 
     def __del__(self):
@@ -233,7 +232,7 @@ class WorkerClient:
         except requests.ConnectionError:
             error = 'No connection'
         except Exception as exception:
-            self.logger.exception("%s connecting %s", self.host, exception)
+            self.logger.exception("%s connecting %s", self.host, exception)  # noqa: TRY401
             error = str(exception)
         else:
             self._last_exception[address] = ''
@@ -252,9 +251,7 @@ class WorkerClient:
             # look for new commands
             while True:
                 data = self._request_command(self.host, 'command')
-                if data is None:
-                    break
-                elif data['command'] == 'none':
+                if data is None or data['command'] == 'none':
                     break
                 self.logger.debug("Command: %s", data)
                 if data['command'] == 'shutdown':
@@ -287,7 +284,7 @@ class WorkerClient:
                 elif data['command'] == 'version':
                     # Intalled package versions
                     packages = data.get('value', 'Python Eelfarm Eelbrain').split()
-                    table = eelbrain.fmtxt.Table('ll')
+                    table = fmtxt.Table('ll')
                     for package in packages:
                         if package.lower() == 'python':
                             version_str = sys.version
@@ -296,7 +293,7 @@ class WorkerClient:
                                 version_str = version_of(package)
                             except PackageNotFoundError:
                                 version_str = '<not found>'
-                            except Exception as exception:
+                            except Exception as exception:  # noqa: BLE001
                                 version_str = str(exception)
                         table.cells(package, version_str)
                     self._post_info(str(table))
@@ -322,9 +319,7 @@ class WorkerClient:
             serve = serve[serve_i_start:] + serve[:serve_i_start]
             for i, host in enumerate(serve, 1):
                 data = self._request_command(host, 'job')
-                if data is None:
-                    continue
-                elif data['command'] == 'none':
+                if data is None or data['command'] == 'none':
                     continue
                 elif data['command'] == 'job':
                     serve_i_start += i
@@ -336,7 +331,7 @@ class WorkerClient:
                     try:
                         job = Job(data['job-id'], host, data['job-path'], int(data['job-bytes']))
                     except Exception as exception:
-                        self.logger.exception("%s creating %s job %s", exception, host, data)
+                        self.logger.exception("%s creating %s job %s", exception, host, data)  # noqa: TRY401
                         self._post_info(f'Exception creating job from {data}', host)
                         continue
                     break
@@ -397,7 +392,7 @@ class WorkerClient:
         except requests.RequestException as exception:
             self.logger.info("%s: download %s", job.desc, format_request_error(exception))
         except Exception as exception:
-            self.logger.exception("%s: downloading data %s", job.desc, exception)
+            self.logger.exception("%s: downloading data %s", job.desc, exception)  # noqa: TRY401
             traceback_text = ''.join(traceback.format_tb(exception.__traceback__))
             self._post_info(f"{job.desc} download failed on {gethostname()}:\n{traceback_text}\n{exception}", to=job.host)
         else:
@@ -420,7 +415,7 @@ class WorkerClient:
             except requests.RequestException as exception:
                 self.logger.info("Post %s to %s failed with %s", what, to, format_request_error(exception))
             except Exception as exception:
-                self.logger.exception("Post %s to %s: %s", what, to, exception)
+                self.logger.exception("Post %s to %s: %s", what, to, exception)  # noqa: TRY401
             if self._terminate.is_set():
                 break
             sleep(self.sleep_time)
@@ -489,7 +484,7 @@ class WorkerClient:
                 except requests.RequestException as exception:
                     self.logger.info("%s: sending result %s", job.desc, format_request_error(exception))
                 except Exception as exception:
-                    self.logger.exception("%s: sending result %s", job.desc, exception)
+                    self.logger.exception("%s: sending result %s", job.desc, exception)  # noqa: TRY401
                 else:
                     self.logger.info("%s: result sent successfully", job.desc)
                     jobs_to_send.remove(job)
@@ -516,7 +511,7 @@ class WorkerClient:
         finished = {host: sum([1 if job.finished else 0 for job in jobs]) for host, jobs in jobs_by_host.items()}
         failed = {host: sum([1 if job.failed else 0 for job in jobs]) for host, jobs in jobs_by_host.items()}
         # table
-        table = eelbrain.fmtxt.Table('llrrrr')
+        table = fmtxt.Table('llrrrr')
         table.cells('', 'Host', 'Done', 'WIP', 'CPU-Time', 'Failed')
         for host in sorted(hosts):
             n_serve = self.serve.count(host) or ''

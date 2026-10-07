@@ -5,7 +5,7 @@ from threading import Condition, Lock
 import traceback
 
 from requests import RequestException
-from eelbrain._utils import ScreenHandler
+# from eelbrain._utils import ScreenHandler
 
 
 class PipeQueue:
@@ -74,4 +74,4 @@ def format_request_error(error: RequestException):
     return ' '.join(items)
 
 
-screen_handler = ScreenHandler()
+# screen_handler = ScreenHandler()

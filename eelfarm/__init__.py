@@ -21,7 +21,7 @@ def start_server(address=None, log='info'):
     # Lazy imports to make command line tool faster
     import logging
     from .server import JobServer
-    from ._utils import screen_handler
+    # from ._utils import screen_handler
 
     # validate log argument
     if isinstance(log, str):
@@ -36,7 +36,7 @@ def start_server(address=None, log='info'):
 
     # configure logging
     if log:
-        server.logger.addHandler(screen_handler)
+        # server.logger.addHandler(screen_handler)
         server.logger.setLevel(log)
         logger = logging.getLogger('eelfarm.server.http')
         logger.setLevel(log)

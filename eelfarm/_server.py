@@ -1,35 +1,31 @@
 """The JobServer serves work jobs to workers"""
 import atexit
+import fnmatch
+import json
+import pickle
+import sys
+import weakref
 from collections import Counter, defaultdict
 from collections.abc import Iterable
 from datetime import timedelta
-from functools import reduce
-from itertools import chain
-import pickle
-import fnmatch
+from functools import cached_property, reduce
 from http import HTTPStatus
-from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-import json
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from itertools import chain
 from logging import DEBUG, ERROR, WARNING, getLogger
 from operator import attrgetter
 from os.path import exists, expanduser, join
 from pathlib import Path
 from queue import Empty, Queue
-from socket import gethostname, gethostbyname
-import sys
-from threading import Thread, Event, Lock
+from socket import gethostbyname, gethostname
+from threading import Event, Lock, Thread
 from time import time
-import weakref
-
-from eelbrain import fmtxt
-from eelbrain._text import enumeration
-from eelbrain._utils import ask
-from functools import cached_property
 
 from ._jobs import JobWithID
-from ._version import version
 from ._transmit import serialize
-
+from ._version import version
+from .string import fmtxt
+from .string._text import ask, enumeration
 
 KILL_SIGNAL = None
 PENDING_JOBS_FILE = join(expanduser('~'), '.eelfarm-server.pickle')
@@ -49,7 +45,7 @@ class DeltaTimeFormatter:
         if t is None:
             return ''
         else:
-            return int(round((self.t - t) / 60))
+            return round((self.t - t) / 60)
 
 
 class Job(JobWithID):
@@ -102,7 +98,7 @@ class Job(JobWithID):
 
 class RequestHandler(BaseHTTPRequestHandler):
     ID = -1
-    OPEN_REQUESTS = {}
+    OPEN_REQUESTS = {}  # noqa: RUF012
 
     def __init__(self, request, client_address, server):
         self.job_server = server.job_server
@@ -165,7 +161,7 @@ class RequestHandler(BaseHTTPRequestHandler):
             job_path = self.headers.get('job-path')
             self.request.settimeout(10)
             message = self.rfile.read(int(self.headers['Content-length'])).decode()
-            self.log_message(f"Job failed: %s\n\n%s", job_path, message, level=ERROR)
+            self.log_message("Job failed: %s\n\n%s", job_path, message, level=ERROR)
             self.job_server._mark_job_failed(job_path, self.client_address[0])
             self.send_response(HTTPStatus.OK)
         elif self.path == '/info':
@@ -254,7 +250,7 @@ class JobServer:
             try:
                 with open(PENDING_JOBS_FILE, 'rb') as fid:
                     pending = pickle.load(fid)
-            except:
+            except:  # noqa: E722
                 self.logger.exception("Reading pending jobs")
                 pending = None
             if pending:
@@ -543,7 +539,7 @@ class JobServer:
             table.cell(job.id)
             table.cell(job.worker)
             if job.sent:
-                table.cell(int(round((t - job.sent) / 60)))
+                table.cell(round((t - job.sent) / 60))
             elif job.received:
                 table.cell('orphan')
             else:
@@ -576,7 +572,7 @@ class JobServer:
         for worker in workers:
             name = self._worker_info.get(worker, '')
             n = len(times[worker])
-            t = int(round(sum(times[worker]) / n)) if n else ''
+            t = round(sum(times[worker]) / n) if n else ''
             table.cells(worker, name, n, t)
         return table
 
@@ -592,8 +588,8 @@ class JobServer:
                 return
         print(f"Deleting {len(paths)} jobs...")
         with self._jobs_lock:
-            for path in paths:
-                job = self._jobs.pop(path)
+            for pth in paths:
+                job = self._jobs.pop(pth)
                 del self._jobs_by_id[job.id]
         self._write_pending_jobs()
 
@@ -646,5 +642,7 @@ class JobServer:
             else:
                 desc = f"Sending {instruction} {value} to"
         print(f"{desc} {enumeration(workers)}")
-        for worker in workers:
-            self._message_queue[worker].append(message)
+        for wk in workers:
+            self._message_queue[wk].append(message)
+
+
